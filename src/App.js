@@ -5,6 +5,7 @@ import './App.css'
 
 import { MOCK_CALENDAR_DATA } from "./Components/data/mockCalendarData";
 import TradingCalendar from "./Components/CalendarView.js/TradingCalendar";
+import TradeEntryForm from "./Components/CalendarView.js/TradeEntryForm";
 
 const ChartJS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js";
 
@@ -42,6 +43,13 @@ export default function App() {
         setSelectedTrade(null);
     }, []);
 
+
+        const [showTradeForm, setShowTradeForm] = useState(false);
+
+        const openTradeForm = () => setShowTradeForm(true);
+        const closeTradeForm = () => setShowTradeForm(false);
+
+
     return (
         <div className={`root-app ${theme === "light" ? "light-mode" : ""}`}>
             {/* <CalendarView
@@ -55,15 +63,18 @@ export default function App() {
                 toggleTheme={toggleTheme}
             /> */}
 
+
             <TradingCalendar 
-                // className={isLightMode ? 'light-mode' : ''}
                 onDayClick={openTradeModal} 
                 setAppDate={setDate}
                 appDate={date}
+                openTradeForm={openTradeForm}   // ← ADD THIS
             />
 
 
-            {selectedTrade && (
+
+
+            {/* {selectedTrade && (
                 <TradeDetailModal
                     isOpen={isModalOpen}
                     onClose={closeTradeModal}
@@ -72,7 +83,20 @@ export default function App() {
                     monthStats={selectedTrade.monthStats}  // monthly stats for chart
                     theme={theme}
                 />
+                )} */}
+
+
+                {showTradeForm && (
+                <TradeEntryForm 
+                    onClose={closeTradeForm}
+                    onSubmit={(trade) => {
+                        console.log("New trade saved:", trade);
+                        closeTradeForm();
+                    }}
+                />
                 )}
+
+
 
         </div>
     );

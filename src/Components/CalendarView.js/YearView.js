@@ -8,6 +8,7 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import YearlyPnlChart from "./YearlyPnlChart";
 import { parsePnL } from "../data/mockCalendarData";
+import YearlyBarChart from "./YearlyBarChart";
 
 export default function YearView({
   date,
@@ -273,7 +274,20 @@ const goToNextYear = () => {
       })}
 
       {/* YEARLY CHART */}    
-      <YearlyPnlChart yearlyPnls={yearlyPnls} year={year}/>
+      {/* <YearlyPnlChart
+        yearlyPnls={yearlyPnls}
+        year={year}
+        // theme={theme}
+        calendarData={calendarData}
+    /> */}
+
+      <YearlyBarChart 
+          year={year}
+          calendarData={calendarData}
+      />
+
+    
+
     </div>
   );
 }

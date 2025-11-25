@@ -3,17 +3,18 @@ import { MOCK_CALENDAR_DATA } from "../data/mockCalendarData";
 
 // Helper to convert "96.8K" / "-4.07K" strings into numbers
 const parsePnl = (pnlStr) => {
-  if (!pnlStr) return 0;
+  if (!pnlStr || pnlStr === "0") return 0;
   const negative = pnlStr.startsWith("-");
-  const numeric = parseFloat(pnlStr.replace(/[^0-9.]/g, ""));
-  const value = pnlStr.toUpperCase().includes("K") ? numeric * 1000 : numeric;
+  const num = parseFloat(pnlStr.replace(/[^0-9.]/g, ''));
+  const value = pnlStr.toUpperCase().includes("K") ? num * 1000 : num;
   return negative ? -value : value;
 };
+
 
 // Map month index to short month name
 const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
-export default function YearlyPnlChart({ yearlyPnls, year, theme }) {
+export default function YearlyPnlChart({ yearlyPnls, year, theme, calendarData }) {
 
    const chartRef = useRef(null);
   const chartInstance = useRef(null);
@@ -35,14 +36,13 @@ const getProfitColor = (monthIndex) =>
 const monthlyData = MONTHS.map((month, idx) => {
   const monthNum = idx + 1;
 
-  const monthEntries = Object.entries(MOCK_CALENDAR_DATA)
-    .filter(([date]) => {
-      const d = new Date(date);
-      return d.getFullYear() === year && d.getMonth() + 1 === monthNum;
-    });
+  const monthEntries = Object.entries(calendarData).filter(([date]) => {
+    const [y, m, day] = date.split("-").map(Number);
+    return y === year && m === monthNum;
+  });
 
   const pnl = monthEntries.reduce((sum, [, data]) => sum + parsePnl(data.pnl), 0);
-  const pips = pnl; // you used pnl for pips earlier
+  const pips = pnl || 0; // <-- default to 0
 
   const color =
     pnl > 0
@@ -55,6 +55,7 @@ const monthlyData = MONTHS.map((month, idx) => {
 });
 
 
+
 useEffect(() => {
     if (!chartRef.current) return;
     const Chart = window.Chart;
@@ -64,22 +65,19 @@ useEffect(() => {
 
     const isDark = theme === "dark";
 
-    chartInstance.current = new Chart(chartRef.current.getContext("2d"), {
-      type: "bar",
-      data: {
-        labels: [
-          "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-        ],
-        datasets: [
-          {
-            data: yearlyPnls,
-            backgroundColor: yearlyPnls.map(pnl => pnl >= 0 ? "#10B981" : "#EF4444"),
-            borderRadius: 4,
-          }
-        ]
-      },
-      options: {
+   chartInstance.current = new Chart(chartRef.current.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: MONTHS,
+      datasets: [
+        {
+          data: monthlyData.map(m => m.pnl), // <-- use your computed monthlyData
+          backgroundColor: monthlyData.map(m => m.color), // use colors too
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -112,13 +110,10 @@ useEffect(() => {
 
 
  const CHART_HEIGHT = 135; // stays the same
+  const maxPnl = Math.max(...monthlyData.map(m => Math.abs(m.pnl)), 1);
 
-const getBarHeight = (pnl) => {
-  const percent = pnl / 100; // convert PNL to percent
-  const clamped = Math.max(-100, Math.min(100, percent)); // keep within axis
+  const getBarHeight = (pnl) => (Math.abs(pnl) / maxPnl) * CHART_HEIGHT;
 
-  return (Math.abs(clamped) / 100) * CHART_HEIGHT;
-};
 
 
   const totalPnl = monthlyData.reduce((a, b) => a + b.pnl, 0);
@@ -137,8 +132,9 @@ const getBarHeight = (pnl) => {
 };
 
 
-  const formatPips = (pips) =>
+ const formatPips = (pips = 0) =>
     pips >= 0 ? `[+${pips.toFixed(2)} Pips]` : `[${pips.toFixed(2)} Pips]`;
+
 
   const hasYearData = monthlyData.some(m => m.pnl !== 0);
 

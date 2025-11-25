@@ -120,6 +120,16 @@ Object.entries(MOCK_CALENDAR_DATA).forEach(([dateStr, data]) => {
   const winRate = totalTrades > 0 ? ((wins / (wins + losses || 1)) * 100).toFixed(2) : 0;
   const profitFactor = losses > 0 ? ((wins / losses) * 100).toFixed(2) : wins > 0 ? '∞' : '0';
   
+  // -------- ROI CALCULATION --------
+  const accountSize = 100000; // <-- Change to your real trading account size
+  const roiPercent = Math.round((totalPnL / accountSize) * 100);
+
+  // --- WEEKLY ROI CALCULATION ---
+
+  weeklyStats.forEach((w) => {
+    w.roiPercent = accountSize > 0 ? Math.round((w.pnl / accountSize) * 100) : 0;
+  });
+
 
 
   return {
@@ -131,7 +141,8 @@ Object.entries(MOCK_CALENDAR_DATA).forEach(([dateStr, data]) => {
     winRate,
     profitFactor,
     weeklyStats,
-    totalTrades, // ⬅ ADD THIS
+    totalTrades, 
+    roiPercent,
   };
 };
 
