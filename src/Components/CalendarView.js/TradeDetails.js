@@ -179,10 +179,10 @@ const noTradesThisMonth = totalMonthlyTrades === 0;
           Analyze Trade Entries
         </button> */}
 
-        <button className="btn btn-primary" onClick={onAddTrade}>
+        {/* <button className="btn btn-primary" onClick={onAddTrade}>
           <TrendingUp className="icon-sm icon-mr" />
           Add Trade
-        </button>
+        </button> */}
       </div>
     </div>
   );
