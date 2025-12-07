@@ -16,26 +16,26 @@ const PIP_SPECIFICATIONS = {
     "USD/CAD": { pipSize: 0.0001, contractSize: 100000, quoteCurrency: "CAD", assetType: "Forex" },
     "USD/CHF": { pipSize: 0.0001, contractSize: 100000, quoteCurrency: "CHF", assetType: "Forex" },
 
-    "XAU/USD": { pipSize: 0.01, contractSize: 100, quoteCurrency: "USD", assetType: "Commodity" }, 
-    "XAG/USD": { pipSize: 0.01, contractSize: 5000, quoteCurrency: "USD", assetType: "Commodity" },
+    "XAU/USD": { pipSize: 0.01, contractSize: 100, quoteCurrency: "USD", assetType: "Commodity" }, // 0.01 -> $1 per pip per lot
+    "XAG/USD": { pipSize: 0.01, contractSize: 5000, quoteCurrency: "USD", assetType: "Commodity" }, // 0.01 -> $50 per pip per lot
 
-    // Indices (tick size / contract size are broker-dependent; these are reasonable defaults)
     "US30": { pipSize: 1.0, contractSize: 1, quoteCurrency: "USD", assetType: "Indices" },
     "NAS100": { pipSize: 1.0, contractSize: 1, quoteCurrency: "USD", assetType: "Indices" },
     "SPX500": { pipSize: 0.1, contractSize: 1, quoteCurrency: "USD", assetType: "Indices" },
     "GER40": { pipSize: 1.0, contractSize: 1, quoteCurrency: "EUR", assetType: "Indices" },
 
+    // Crypto (simplified)
     "BTC/USD": { pipSize: 1.0, contractSize: 1, quoteCurrency: "USD", assetType: "Crypto" },
     "ETH/USD": { pipSize: 1.0, contractSize: 1, quoteCurrency: "USD", assetType: "Crypto" },
 };
 
 const EXCHANGE_RATES_TO_USD = {
     "USD": 1.0,
-    "JPY": 1 / 150.0,  
+    "JPY": 1 / 150.0,   
     "CAD": 1 / 1.35,    
-    "EUR": 1.08, 
-    "GBP": 1.25,  
-    "CHF": 1 / 0.88   
+    "EUR": 1.08,        
+    "GBP": 1.25,        
+    "CHF": 1 / 0.88     
 };
 
 export default function TradeEntryForm({ onSubmit, onClose, initialDate = null }) {
@@ -64,12 +64,14 @@ export default function TradeEntryForm({ onSubmit, onClose, initialDate = null }
         takeProfitPips: "",
         pips: "",
         pnl: "",
-        riskType: "percentage",
-        riskValue: 1,
-        riskMoney: "0.00", 
-        projectedPnlAtTP: "0.00",
-        projectedPnlAtSL: "0.00", 
-        rr: "",
+
+        // Risk fields
+        riskType: "percentage", // percentage | money | lot
+        riskValue: 1, // meaning depends on riskType
+        riskMoney: "0.00", // $ risk (calculated)
+        projectedPnlAtTP: "0.00", // $ projected profit at TP
+        projectedPnlAtSL: "0.00", // $ projected loss at SL (should match riskMoney when lot derived from risk)
+        rr: "", // reward to risk ratio
 
         status: "open",
         outcome: "win",
@@ -93,7 +95,6 @@ export default function TradeEntryForm({ onSubmit, onClose, initialDate = null }
         const p = Math.pow(10, dp);
         return Math.round((v + Number.EPSILON) * p) / p;
     };
-
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -160,11 +161,10 @@ export default function TradeEntryForm({ onSubmit, onClose, initialDate = null }
         if (formData.riskType === "percentage" && capital <= 0) {
             return;
         }
-
         const quoteCurrency = specs.quoteCurrency;
-        const conv = EXCHANGE_RATES_TO_USD[quoteCurrency] || 1.0; 
-        const pipValueUsdPerLot = specs.contractSize * specs.pipSize * conv; 
-        const riskPerLotUsd = pipValueUsdPerLot * stopLossPips; 
+        const conv = EXCHANGE_RATES_TO_USD[quoteCurrency] || 1.0; // USD per 1 quote unit
+        const pipValueUsdPerLot = specs.contractSize * specs.pipSize * conv; // USD per pip per 1 lot
+        const riskPerLotUsd = pipValueUsdPerLot * stopLossPips; // USD risk if 1 lot hits SL
 
         let riskMoney = 0;
         let lotSize = 0;
@@ -190,11 +190,13 @@ export default function TradeEntryForm({ onSubmit, onClose, initialDate = null }
         }));
     };
 
-   
     useEffect(() => {
+        calculateRiskAndLot();
+    }, [formData.riskType, formData.riskValue, formData.stopLossPips, formData.pair]);
+
+   useEffect(() => {
     const { entryPrice, exitPrice, direction, pair } = formData;
 
-    // Only need entry and exit to calculate pips
     if (!entryPrice || !exitPrice || !pair) {
         setFormData(prev => ({ ...prev, pips: "" }));
         return;
@@ -225,54 +227,6 @@ export default function TradeEntryForm({ onSubmit, onClose, initialDate = null }
     formData.pair
 ]);
 
-
-// Unified effect for risk/lots
-useEffect(() => {
-    const specs = formData.pair ? PIP_SPECIFICATIONS[formData.pair] : null;
-    const stopLossPips = safeParse(formData.stopLossPips);
-    const riskValueRaw = safeParse(formData.riskValue);
-
-    if (!specs || stopLossPips <= 0 || !formData.pair) {
-        // Reset if not enough data
-        setFormData(prev => ({
-            ...prev,
-            lotSize: "",
-            riskMoney: "0.00"
-        }));
-        return;
-    }
-
-    const account = JSON.parse(localStorage.getItem("active_account"));
-    const capital = account ? safeParse(account.capital) : 0;
-
-    const conv = EXCHANGE_RATES_TO_USD[specs.quoteCurrency] || 1.0;
-    const pipValueUsdPerLot = specs.contractSize * specs.pipSize * conv; // $ per pip per lot
-    const riskPerLotUsd = stopLossPips * pipValueUsdPerLot;
-
-    let lotSize = 0;
-    let riskMoney = 0;
-
-    if (formData.riskType === "percentage") {
-        riskMoney = (capital * riskValueRaw) / 100;
-        lotSize = riskPerLotUsd > 0 ? riskMoney / riskPerLotUsd : 0;
-    } else if (formData.riskType === "money") {
-        riskMoney = riskValueRaw;
-        lotSize = riskPerLotUsd > 0 ? riskMoney / riskPerLotUsd : 0;
-    } else if (formData.riskType === "lot") {
-        // User input is now interpreted as "riskValue" in lots
-        lotSize = riskValueRaw;
-        riskMoney = lotSize * riskPerLotUsd;
-    }
-
-    setFormData(prev => ({
-        ...prev,
-        lotSize: lotSize ? round(lotSize, 2).toFixed(2) : "",
-        riskMoney: round(riskMoney, 2).toFixed(2)
-    }));
-}, [formData.riskType, formData.riskValue, formData.stopLossPips, formData.pair]);
-
-
-
     const calculatePnLAndProjections = () => {
         const specs = formData.pair ? PIP_SPECIFICATIONS[formData.pair] : null;
         if (!specs) {
@@ -280,29 +234,24 @@ useEffect(() => {
             return;
         }
 
-        // parse core values
         const pipCount = safeParse(formData.pips); // realized pips (if closed)
         const slPips = safeParse(formData.stopLossPips);
         const tpPips = safeParse(formData.takeProfitPips);
         const lots = safeParse(formData.lotSize);
 
-        // pip value USD per lot
         const conv = EXCHANGE_RATES_TO_USD[specs.quoteCurrency] || 1.0;
         const pipValueUsdPerLot = specs.contractSize * specs.pipSize * conv; // USD per pip per lot
 
-        // Realized pnl (if closed)
         let netPnL = 0;
         if (pipCount !== 0 && lots !== 0 && formData.status === "closed") {
             netPnL = pipCount * pipValueUsdPerLot * lots;
         }
 
-        // Projected at TP and SL
         let projectedAtTP = 0;
         let projectedAtSL = 0;
         if (tpPips > 0 && lots > 0) projectedAtTP = tpPips * pipValueUsdPerLot * lots;
         if (slPips > 0 && lots > 0) projectedAtSL = slPips * pipValueUsdPerLot * lots;
 
-        // Reward-to-risk ratio
         let rr = "";
         if (slPips > 0 && tpPips > 0) {
             const rrRaw = tpPips / slPips;
@@ -324,61 +273,125 @@ useEffect(() => {
 
 
     useEffect(() => {
-    const specs = PIP_SPECIFICATIONS[formData.pair];
+    const specs = formData.pair ? PIP_SPECIFICATIONS[formData.pair] : null;
+
     const entry = safeParse(formData.entryPrice);
-    const sl = safeParse(formData.stopLoss);
+    const exit = safeParse(formData.exitPrice);
+    const slPrice = safeParse(formData.stopLoss);
+    const tpPrice = safeParse(formData.takeProfit);
 
-    if (!specs || !entry || !sl) {
-        setFormData(prev => ({
-            ...prev,
-            stopLossPips: "",
-            lotSize: "",
-            riskMoney: "0.00"
-        }));
-        return;
-    }
-
-    // calculate stopLossPips
-    const pipMultiplier = 1 / specs.pipSize;
-    const stopLossPips = Math.abs(entry - sl) * pipMultiplier;
-
-    // calculate lot size based on risk
+    const lots = safeParse(formData.lotSize);
     const riskValueRaw = safeParse(formData.riskValue);
+
     const account = JSON.parse(localStorage.getItem("active_account"));
     const capital = account ? safeParse(account.capital) : 0;
-    const conv = EXCHANGE_RATES_TO_USD[specs.quoteCurrency] || 1.0;
-    const pipValueUsdPerLot = specs.contractSize * specs.pipSize * conv;
-    const riskPerLotUsd = pipValueUsdPerLot * stopLossPips;
 
-    let lotSize = 0;
+    let stopLossPips = "";
+    let takeProfitPips = "";
+    let pipCount = "";
+    let pipValueUsdPerLot = 0;
     let riskMoney = 0;
+    let newLotSize = formData.lotSize;
+    let projectedTP = 0;
+    let projectedSL = 0;
+    let pnl = "";
+    let rr = "";
 
-    switch (formData.riskType) {
-        case "percentage":
-            riskMoney = (capital * riskValueRaw) / 100;
-            lotSize = riskPerLotUsd > 0 ? riskMoney / riskPerLotUsd : 0;
-            break;
-        case "money":
+    if (specs) {
+        const pipMult = 1 / specs.pipSize;
+        const conv = EXCHANGE_RATES_TO_USD[specs.quoteCurrency] || 1;
+
+        pipValueUsdPerLot = specs.contractSize * specs.pipSize * conv;
+
+        // SL pips
+        if (entry && slPrice) {
+            stopLossPips = round(Math.abs(entry - slPrice) * pipMult, 2).toFixed(2);
+        }
+
+        // TP pips
+        if (entry && tpPrice) {
+            takeProfitPips = round(Math.abs(tpPrice - entry) * pipMult, 2).toFixed(2);
+        }
+
+        // Entry → Exit pips (auto even when open)
+        if (entry && exit) {
+            let diff =
+                formData.direction === "long"
+                    ? (exit - entry) * pipMult
+                    : (entry - exit) * pipMult;
+
+            if (Math.abs(diff) < 0.000001) diff = 0;
+            pipCount = round(diff, 2).toFixed(2);
+        }
+    }
+
+    // ------------------------
+    // 2. Risk → Lot calculation
+    // ------------------------
+    const slP = safeParse(stopLossPips);
+    const oneLotRisk = pipValueUsdPerLot * slP; // USD risk per lot
+
+    if (specs && slP > 0) {
+        if (formData.riskType === "percentage") {
+            if (capital > 0) {
+                riskMoney = (capital * riskValueRaw) / 100;
+                newLotSize = oneLotRisk > 0 ? riskMoney / oneLotRisk : 0;
+            }
+        } else if (formData.riskType === "money") {
             riskMoney = riskValueRaw;
-            lotSize = riskPerLotUsd > 0 ? riskMoney / riskPerLotUsd : 0;
-            break;
-        case "lot":
-            lotSize = riskValueRaw;
-            riskMoney = lotSize * riskPerLotUsd;
-            break;
-        default:
-            lotSize = 0;
-            riskMoney = 0;
+            newLotSize = oneLotRisk > 0 ? riskMoney / oneLotRisk : 0;
+        } else if (formData.riskType === "lot") {
+            newLotSize = riskValueRaw;
+            riskMoney = newLotSize * oneLotRisk;
+        }
+    }
+
+    // normalize
+    newLotSize = newLotSize ? round(newLotSize, 2).toFixed(2) : "";
+    riskMoney = round(riskMoney, 2).toFixed(2);
+
+    const tpP = safeParse(takeProfitPips);
+    const lotNum = safeParse(newLotSize);
+
+    if (tpP > 0 && lotNum > 0) {
+        projectedTP = round(tpP * pipValueUsdPerLot * lotNum, 2).toFixed(2);
+    }
+
+    if (slP > 0 && lotNum > 0) {
+        projectedSL = round(slP * pipValueUsdPerLot * lotNum, 2).toFixed(2);
+    }
+
+    // RR
+    if (slP > 0 && tpP > 0) {
+        rr = round(tpP / slP, 2).toFixed(2);
+    }
+
+    if (pipCount !== "" && lotNum > 0 && specs) {
+        pnl = round(safeParse(pipCount) * pipValueUsdPerLot * lotNum, 2).toFixed(2);
     }
 
     setFormData(prev => ({
         ...prev,
-        stopLossPips: round(stopLossPips, 2).toFixed(2),
-        lotSize: lotSize ? round(lotSize, 2).toFixed(2) : "",
-        riskMoney: round(riskMoney, 2).toFixed(2)
+        stopLossPips,
+        takeProfitPips,
+        pips: pipCount,
+        riskMoney,
+        lotSize: newLotSize,
+        projectedPnlAtTP: projectedTP,
+        projectedPnlAtSL: projectedSL,
+        rr,
+        pnl
     }));
-}, [formData.entryPrice, formData.stopLoss, formData.riskValue, formData.riskType, formData.pair]);
-
+}, [
+    formData.pair,
+    formData.entryPrice,
+    formData.exitPrice,
+    formData.stopLoss,
+    formData.takeProfit,
+    formData.direction,
+    formData.riskType,
+    formData.riskValue
+]);
 
     const validate = () => {
         const e = {};
@@ -529,6 +542,9 @@ useEffect(() => {
         window.location.reload();
     };
 
+    /* ---------------------------------
+        Conditional UI helpers and pair lists
+    --------------------------------- */
     const isSwing = formData.duration === "swing";
     const isStatusClosed = formData.status === "closed";
 
@@ -567,59 +583,7 @@ useEffect(() => {
 
                 {/* FORM */}
                 <div className="trade-form">
-
-                    {/* DATE SECTION */}
-                    <div className="form-section">
-                        <h3 className="section-title">
-                            <Calendar size={18} />
-                            Date & Time
-                        </h3>
-
-                        <div className="form-row">
-
-                            {/* Trade Date */}
-                            <div className="form-group">
-                                <label>Trade Date *</label>
-                                <input type="date" name="date" value={formData.date} onChange={handleChange} className={errors.date ? 'error' : ''} />
-                                {errors.date && <span className="error-text">{errors.date}</span>}
-                            </div>
-
-                            {/* Duration */}
-                            <div className="form-group">
-                                <label>Trade Duration</label>
-                                <select name="duration" value={formData.duration} onChange={handleChange}>
-                                    <option value="day">Day Trade</option>
-                                    <option value="swing">Swing Trade</option>
-                                </select>
-                            </div>
-
-                            <div className="form-group">
-                                <label>Entry Time</label>
-                                <input type="time" name="entryTime" value={formData.entryTime} onChange={handleChange} />
-                            </div>
-
-                            {isStatusClosed && (
-                                <div className="form-group">
-                                    <label>Exit Time</label>
-                                    <input type="time" name="exitTime" value={formData.exitTime} onChange={handleChange} />
-                                </div>
-                            )}
-
-                            {isSwing && (
-                                <div className="form-group">
-                                    <label>Entry Date</label>
-                                    <input type="date" name="entryDate" value={formData.entryDate} onChange={handleChange} />
-                                </div>
-                            )}
-
-                            {isSwing && isStatusClosed && (
-                                <div className="form-group">
-                                    <label>Exit Date</label>
-                                    <input type="date" name="exitDate" value={formData.exitDate} onChange={handleChange} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
+               
 
                     {/* TRADE DETAILS */}
                     <div className="form-section">
@@ -628,15 +592,7 @@ useEffect(() => {
                             Trade Details
                         </h3>
 
-                        <div className="form-row"><div className="form-group">
-                                <label>Status</label>
-                                <select name="status" value={formData.status} onChange={handleChange}>
-                                    <option value="open">Open</option>
-                                    <option value="closed">Closed</option>
-                                </select>
-                            </div>
-
-
+                        <div className="form-row">
 
                             <div className="form-group">
                                 <label>Asset Type</label>
@@ -667,7 +623,13 @@ useEffect(() => {
                                 </select>
                             </div>
 
-                            
+                            <div className="form-group">
+                                <label>Status</label>
+                                <select name="status" value={formData.status} onChange={handleChange}>
+                                    <option value="open">Open</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </div>
 
                         </div>
 
@@ -712,17 +674,15 @@ useEffect(() => {
                             </div>
 
                             <div className="form-group">
-                                <div className="form-group">
-                                  <label>Calculated Lot Size</label>
-                                  <input
-                                      type="text"
-                                      name="lotSize"
-                                      value={formData.lotSize}
-                                      readOnly
-                                      className="read-only-input"
-                                  />
-                              </div>
-
+                                <label>{formData.riskType === "lot" ? "Lot Size *" : "Calculated Lot Size"}</label>
+                                <input
+                                    type="text"
+                                    name="lotSize"
+                                    value={formData.lotSize}
+                                    onChange={formData.riskType === "lot" ? handleChange : undefined}
+                                    readOnly={formData.riskType !== "lot"}
+                                    className={formData.riskType !== "lot" ? 'read-only-input' : (errors.lotSize ? 'error' : '')}
+                                />
                                 {errors.lotSize && <span className="error-text">{errors.lotSize}</span>}
                             </div>
 
@@ -779,58 +739,12 @@ useEffect(() => {
                                     {errors.pnl && <span className="error-text">{errors.pnl}</span>}
                                 </div>
 
-                                <div className="form-group">
-                                    <label>Outcome</label>
-                                    <select name="outcome" value={formData.outcome} onChange={handleChange}>
-                                        <option value="win">Win</option>
-                                        <option value="loss">Loss</option>
-                                        <option value="breakeven">Break Even</option>
-                                    </select>
-                                </div>
                             </div>
 
-                          
+                     
                         </div>
                     )}
 
-                    <div className="form-section">
-                        <h3 className="section-title">
-                            <AlertCircle size={18} />
-                            Analysis & Notes
-                        </h3>
-
-                        <div className="form-group full-width">
-                            <label>Setup/Pattern</label>
-                            <input type="text" name="setup" value={formData.setup} onChange={handleChange} placeholder="e.g., Double Bottom, H&S" />
-                        </div>
-                        <br />
-
-                        <div className="form-group full-width">
-                            <label>Trade Notes</label>
-                            <textarea name="notes" value={formData.notes} onChange={handleChange} rows="4" placeholder="What happened in this trade? What did you learn?" />
-                        </div>
-                    </div>
-
-                    {/* SCREENSHOTS */}
-                    <div className="form-section">
-                        <h3 className="section-title">
-                            <AlertCircle size={18} />
-                            Trade Screenshots
-                        </h3>
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label>Before Trade Screenshot</label>
-                                <input type="file" name="beforeScreenshot" accept="image/*" onChange={handleFileChange} />
-                            </div>
-
-                            {isStatusClosed && (
-                                <div className="form-group">
-                                    <label>After Trade Screenshot</label>
-                                    <input type="file" name="afterScreenshot" accept="image/*" onChange={handleFileChange} />
-                                </div>
-                            )}
-                        </div>
-                    </div>
 
                     {/* Actions */}
                     <div className="form-actions">

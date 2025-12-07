@@ -1,9 +1,32 @@
 import React, { useState } from 'react';
 import { supabase } from "../../supabase";
 
+
+const pipValueTable = {
+  "EURUSD": 10,
+  "GBPUSD": 10,
+  "AUDUSD": 10,
+  "NZDUSD": 10,
+
+  "USDJPY": 0.091, // 1 pip = 0.01, so value ≈ $0.091 per micro lot
+  "EURJPY": 0.091,
+  "GBPJPY": 0.091,
+
+  "USDCAD": 7.5,
+  "USDCHF": 9.5,
+
+  "XAUUSD": 1,   // 1 pip = 1 cent, 0.01 move = $1 for 1 lot
+  "XAGUSD": 0.5,
+  "BTCUSD": 1,   // simplified: $1 per 0.01 unit
+  "ETHUSD": 1
+};
+
 export default function AuthForm({ onLoginSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+
+
+  
 
   const [formData, setFormData] = useState({
     name: "",
