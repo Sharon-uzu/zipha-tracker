@@ -61,7 +61,7 @@ const getTotalStats = () => {
         totalBreakeven,
         totalTradingDays,
         totalWinRate,
-        totalProfitFactor: betterProfitFactor, // Use the more accurate calculation
+        totalProfitFactor: betterProfitFactor, 
     };
 };
 
@@ -299,7 +299,7 @@ export default function TradingCalendar({ onDayClick, setAppDate, appDate, openT
 }, []);
 
 
-  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false); // Add this
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(true); // Add this
 
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -460,7 +460,7 @@ const handleSwitchAccount = async (id) => {
   // Reload trades for the selected account
   await populateCalendarData();
 
-  window.location.reload();
+  //  window.location.reload();
 
 
   console.log(`Switched to account: ${acc.account_name}`, acc);

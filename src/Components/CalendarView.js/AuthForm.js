@@ -145,6 +145,8 @@ export default function AuthForm({ onLoginSuccess }) {
     console.log(data);
 
     alert("Login successful!");
+    //  window.location.reload();
+
 
     if (onLoginSuccess) onLoginSuccess();
   };
@@ -156,6 +158,7 @@ export default function AuthForm({ onLoginSuccess }) {
     e.preventDefault();
     if (isLogin) handleLogin();
     else handleSignup();
+
   };
 
   // ---------------------------
