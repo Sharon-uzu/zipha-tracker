@@ -69,7 +69,7 @@ const getTotalStats = () => {
 
 
 
-const SwitchAccountModal = ({ accounts, onClose, onSwitch, onCreateNew }) => {
+const SwitchAccountModal = ({ accounts, onClose, onSwitch, onCreateNew, onDelete }) => {
 
   
     return (
@@ -119,9 +119,12 @@ const SwitchAccountModal = ({ accounts, onClose, onSwitch, onCreateNew }) => {
                       <button 
                         className="delete-btn" 
                         onClick={(e) => { 
-                          e.stopPropagation(); 
-                          console.log(`Delete account ${account.account_name}`); 
-                        }}
+                              e.stopPropagation(); 
+                              const confirmed = window.confirm(`Are you sure you want to delete "${account.account_name}"? This will also delete all associated tracking records.`);
+                              if (confirmed) {
+                                onDelete(account.id);
+                              }
+                            }}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -467,6 +470,47 @@ const handleSwitchAccount = async (id) => {
 };
 
 
+const handleDeleteAccount = async (accountId) => {
+    try {
+        // 1. Delete all records from zipha-tracker linked to this account_id
+        const { error: trackerError } = await supabase
+            .from("zipha-tracker")
+            .delete()
+            .eq("account_id", accountId);
+
+        if (trackerError) throw trackerError;
+
+        // 2. Delete the account from zipha-accounts
+        const { error: accountError } = await supabase
+            .from("zipha-accounts")
+            .delete()
+            .eq("id", accountId);
+
+        if (accountError) throw accountError;
+
+        // 3. Update Local State
+        setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+
+        // 4. If the deleted account was the active one, switch to another or clear
+        if (activeAccount?.id === accountId) {
+            const remainingAccounts = accounts.filter(acc => acc.id !== accountId);
+            if (remainingAccounts.length > 0) {
+                handleSwitchAccount(remainingAccounts[0].id);
+            } else {
+                setActiveAccount(null);
+                setUserCapital(0);
+                localStorage.removeItem("active_account");
+            }
+        }
+
+        alert("Account and associated data deleted successfully.");
+    } catch (error) {
+        console.error("Error during deletion:", error);
+        alert("Failed to delete account: " + error.message);
+    }
+};
+
+
 const handleCreateNewAccount = () => {
   setIsAccountModalOpen(false);
   setIsCreateModalOpen(true);
@@ -514,6 +558,7 @@ if (currentView === "analytics") {
             onClose={() => setIsAccountModalOpen(false)}
             onSwitch={handleSwitchAccount}
             onCreateNew={handleCreateNewAccount}
+            onDelete={handleDeleteAccount}
         />
     )}
 
